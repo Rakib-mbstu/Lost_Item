@@ -1,0 +1,180 @@
+namespace Lost_Item.Services;
+
+using Microsoft.EntityFrameworkCore;
+using Lost_Item.Data;
+using Lost_Item.DTOs;
+using Lost_Item.Models;
+public class ComplaintService : IComplaintService
+{
+    private readonly AppDbContext _db;
+    private readonly IWebHostEnvironment _env;
+    private readonly ILogger<ComplaintService> _logger;
+
+    private static readonly string[] AllowedExtensions = [".pdf", ".jpg", ".jpeg", ".png"];
+    private const long MaxFileSizeBytes = 10 * 1024 * 1024; // 10 MB
+
+    public ComplaintService(AppDbContext db, IWebHostEnvironment env, ILogger<ComplaintService> logger)
+    {
+        _db = db;
+        _env = env;
+        _logger = logger;
+    }
+
+    public async Task<(ComplaintResponse? Result, string? Error)> CreateAsync(
+        int userId, int productId, string locationStolen, IFormFile policeReport)
+    {
+        // Validate product exists
+        var product = await _db.Products.FindAsync(productId);
+        if (product == null)
+            return (null, $"Product with ID {productId} not found");
+
+        // Validate location
+        if (string.IsNullOrWhiteSpace(locationStolen))
+            return (null, "Location stolen is required");
+
+        // Validate file
+        if (policeReport == null || policeReport.Length == 0)
+            return (null, "Police report file is required");
+
+        if (policeReport.Length > MaxFileSizeBytes)
+            return (null, "File size must not exceed 10 MB");
+
+        var ext = Path.GetExtension(policeReport.FileName).ToLowerInvariant();
+        if (!AllowedExtensions.Contains(ext))
+            return (null, "Only PDF, JPG, or PNG files are accepted");
+
+        // Save file
+        var uploadsDir = Path.Combine(_env.ContentRootPath, "Uploads");
+        Directory.CreateDirectory(uploadsDir);
+        var fileName = $"{Guid.NewGuid()}{ext}";
+        var filePath = Path.Combine(uploadsDir, fileName);
+
+        try
+        {
+            await using var stream = File.Create(filePath);
+            await policeReport.CopyToAsync(stream);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to save police report file");
+            return (null, "Failed to save uploaded file");
+        }
+
+        var complaint = new Complaint
+        {
+            ProductId = productId,
+            UserId = userId,
+            LocationStolen = locationStolen.Trim(),
+            PoliceReportPath = fileName,
+            Status = ComplaintStatus.Open
+        };
+
+        _db.Complaints.Add(complaint);
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("Complaint created: Id={Id}, ProductId={ProductId}, UserId={UserId}",
+            complaint.Id, productId, userId);
+
+        var response = await BuildResponseAsync(complaint.Id);
+        return (response, null);
+    }
+
+    public async Task<List<ComplaintResponse>> GetAllAsync()
+    {
+        var complaints = await _db.Complaints
+            .Include(c => c.User)
+            .Include(c => c.Product)
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync();
+
+        return complaints.Select(MapToResponse).ToList();
+    }
+
+    public async Task<List<ComplaintResponse>> GetByUserAsync(int userId)
+    {
+        var complaints = await _db.Complaints
+            .Include(c => c.User)
+            .Include(c => c.Product)
+            .Where(c => c.UserId == userId)
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync();
+
+        return complaints.Select(MapToResponse).ToList();
+    }
+
+    public async Task<ComplaintResponse?> GetByIdAsync(int id)
+    {
+        var complaint = await _db.Complaints
+            .Include(c => c.User)
+            .Include(c => c.Product)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        return complaint == null ? null : MapToResponse(complaint);
+    }
+
+    public async Task<(bool Success, string? Error)> ResolveAsync(int complaintId, int userId, bool isAdmin)
+    {
+        var complaint = await _db.Complaints.FindAsync(complaintId);
+        if (complaint == null)
+            return (false, "Complaint not found");
+
+        if (!isAdmin && complaint.UserId != userId)
+            return (false, "You are not authorized to resolve this complaint");
+
+        if (complaint.Status == ComplaintStatus.Resolved)
+            return (false, "Complaint is already resolved");
+
+        complaint.Status = ComplaintStatus.Resolved;
+        complaint.ResolvedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Complaint resolved: Id={Id} by UserId={UserId}", complaintId, userId);
+        return (true, null);
+    }
+
+    public async Task<(bool Success, string? Error)> DeleteAsync(int complaintId, int userId, bool isAdmin)
+    {
+        var complaint = await _db.Complaints.FindAsync(complaintId);
+        if (complaint == null)
+            return (false, "Complaint not found");
+
+        if (!isAdmin && complaint.UserId != userId)
+            return (false, "You are not authorized to delete this complaint");
+
+        // Delete the uploaded file
+        var filePath = Path.Combine(_env.ContentRootPath, "Uploads", complaint.PoliceReportPath);
+        if (File.Exists(filePath))
+        {
+            try { File.Delete(filePath); }
+            catch (Exception ex) { _logger.LogWarning(ex, "Could not delete file: {Path}", filePath); }
+        }
+
+        _db.Complaints.Remove(complaint);
+        await _db.SaveChangesAsync();
+        _logger.LogInformation("Complaint deleted: Id={Id} by UserId={UserId}", complaintId, userId);
+        return (true, null);
+    }
+
+    // --- Helpers ---
+
+    private async Task<ComplaintResponse?> BuildResponseAsync(int id)
+    {
+        var c = await _db.Complaints
+            .Include(c => c.User)
+            .Include(c => c.Product)
+            .FirstOrDefaultAsync(c => c.Id == id);
+
+        return c == null ? null : MapToResponse(c);
+    }
+
+    private static ComplaintResponse MapToResponse(Complaint c) => new(
+        c.Id,
+        c.ProductId,
+        c.Product.TrackingId,
+        c.User.Name,
+        c.LocationStolen,
+        $"/uploads/{c.PoliceReportPath}",
+        c.Status.ToString(),
+        c.CreatedAt,
+        c.ResolvedAt
+    );
+}
