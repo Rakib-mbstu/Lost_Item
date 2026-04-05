@@ -1,0 +1,32 @@
+# ── Backend ──────────────────────────────────────────────────────────────────
+Lost_Item/bin/
+Lost_Item/obj/
+
+# Real secrets — copy appsettings.example.json and fill in your values
+Lost_Item/appsettings.json
+Lost_Item/appsettings.Development.json
+
+# Uploaded police-report files (user data, not source)
+Lost_Item/Uploads/*
+!Lost_Item/Uploads/.gitkeep
+
+# ── Frontend ─────────────────────────────────────────────────────────────────
+Lost_Item_frontend/node_modules/
+Lost_Item_frontend/dist/
+
+# Real secrets — copy .env.example and fill in your values
+Lost_Item_frontend/.env
+Lost_Item_frontend/.env.local
+Lost_Item_frontend/.env.production
+
+# ── IDE / OS ─────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.user
+*.suo
+.DS_Store
+Thumbs.db
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+*.log
+*.tmp
