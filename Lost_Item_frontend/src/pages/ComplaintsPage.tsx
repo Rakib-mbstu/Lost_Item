@@ -142,14 +142,14 @@ export default function ComplaintsPage() {
           <div key={c.id} style={s.card}>
             <div style={s.cardHeader}>
               <span style={s.trackingId}>{c.productTrackingId}</span>
-              <span style={{ ...s.status, background: c.status === 'Open' ? '#e94560' : '#27ae60' }}>{c.status}</span>
+              <span style={{ ...s.status, background: statusColor(c.status) }}>{c.status}</span>
             </div>
             <p style={s.field}>📍 {c.locationStolen}</p>
             <p style={s.field}>👤 {c.userName}</p>
             <p style={s.date}>{new Date(c.createdAt).toLocaleDateString()}</p>
             <div style={s.actions}>
               <a href={c.policeReportUrl} target="_blank" rel="noreferrer" style={s.link}>📄 Police Report</a>
-              {c.status === 'Open' && (user?.isAdmin || true) && (
+              {c.status === 'Approved' && user?.isAdmin && (
                 <button style={s.resolveBtn} onClick={() => resolve(c.id)}>Mark Resolved</button>
               )}
             </div>
@@ -159,6 +159,15 @@ export default function ComplaintsPage() {
       </div>
     </div>
   )
+}
+
+function statusColor(status: string): string {
+  switch (status) {
+    case 'Approved':  return '#e94560'
+    case 'Resolved':  return '#27ae60'
+    case 'Rejected':  return '#888'
+    default:          return '#f39c12'   // Pending
+  }
 }
 
 const s: Record<string, React.CSSProperties> = {
