@@ -66,7 +66,7 @@ public class ComplaintService : IComplaintService
             UserId = userId,
             LocationStolen = locationStolen.Trim(),
             PoliceReportPath = fileName,
-            Status = ComplaintStatus.Open
+            Status = ComplaintStatus.Pending
         };
 
         _db.Complaints.Add(complaint);
@@ -111,23 +111,54 @@ public class ComplaintService : IComplaintService
         return complaint == null ? null : MapToResponse(complaint);
     }
 
-    public async Task<(bool Success, string? Error)> ResolveAsync(int complaintId, int userId, bool isAdmin)
+    public async Task<(bool Success, string? Error)> ApproveAsync(int complaintId, int adminId)
     {
         var complaint = await _db.Complaints.FindAsync(complaintId);
         if (complaint == null)
             return (false, "Complaint not found");
 
-        if (!isAdmin && complaint.UserId != userId)
-            return (false, "You are not authorized to resolve this complaint");
+        if (complaint.Status != ComplaintStatus.Pending)
+            return (false, "Only pending complaints can be approved");
 
-        if (complaint.Status == ComplaintStatus.Resolved)
-            return (false, "Complaint is already resolved");
+        complaint.Status = ComplaintStatus.Approved;
+        complaint.ReviewedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Complaint approved: Id={Id} by AdminId={AdminId}", complaintId, adminId);
+        return (true, null);
+    }
+
+    public async Task<(bool Success, string? Error)> RejectAsync(int complaintId, int adminId)
+    {
+        var complaint = await _db.Complaints.FindAsync(complaintId);
+        if (complaint == null)
+            return (false, "Complaint not found");
+
+        if (complaint.Status != ComplaintStatus.Pending)
+            return (false, "Only pending complaints can be rejected");
+
+        complaint.Status = ComplaintStatus.Rejected;
+        complaint.ReviewedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        _logger.LogInformation("Complaint rejected: Id={Id} by AdminId={AdminId}", complaintId, adminId);
+        return (true, null);
+    }
+
+    public async Task<(bool Success, string? Error)> ResolveAsync(int complaintId, int adminId)
+    {
+        var complaint = await _db.Complaints.FindAsync(complaintId);
+        if (complaint == null)
+            return (false, "Complaint not found");
+
+        if (complaint.Status != ComplaintStatus.Approved)
+            return (false, "Only approved complaints can be resolved");
 
         complaint.Status = ComplaintStatus.Resolved;
         complaint.ResolvedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
 
-        _logger.LogInformation("Complaint resolved: Id={Id} by UserId={UserId}", complaintId, userId);
+        _logger.LogInformation("Complaint resolved: Id={Id} by AdminId={AdminId}", complaintId, adminId);
         return (true, null);
     }
 
@@ -166,15 +197,28 @@ public class ComplaintService : IComplaintService
         return c == null ? null : MapToResponse(c);
     }
 
+    private static string GetDisplayId(Product product) => product switch
+    {
+        Mobile m => m.IMEI ?? product.TrackingId,
+        Bike b   => b.FrameNumber ?? product.TrackingId,
+        Laptop l => l.SerialNumber ?? product.TrackingId,
+        _        => product.TrackingId
+    };
+
     private static ComplaintResponse MapToResponse(Complaint c) => new(
         c.Id,
         c.ProductId,
-        c.Product.TrackingId,
+        GetDisplayId(c.Product),
+        c.Product.Brand,
+        c.Product.Model,
+        c.Product.Type.ToString(),
         c.User.Name,
+        c.User.Email,
         c.LocationStolen,
         $"/uploads/{c.PoliceReportPath}",
         c.Status.ToString(),
         c.CreatedAt,
+        c.ReviewedAt,
         c.ResolvedAt
     );
 }

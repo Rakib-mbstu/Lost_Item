@@ -20,10 +20,12 @@ public class ComplaintsController : ControllerBase
     }
 
     [HttpGet]
-    // [Authorize]
+    [Authorize]
     public async Task<IActionResult> GetAll()
     {
-        var data = await _complaints.GetAllAsync();
+        var data = IsAdmin()
+            ? await _complaints.GetAllAsync()
+            : await _complaints.GetByUserAsync(GetUserId());
         return Ok(data);
     }
 
@@ -35,13 +37,14 @@ public class ComplaintsController : ControllerBase
         [FromForm] string model,
         [FromForm] string? imei,            // Mobile
         [FromForm] string? frameNumber,     // Bike
-        [FromForm] string? color,           // Bike
+        [FromForm] string? engineNumber,           // Bike
         [FromForm] string? serialNumber,    // Laptop
         [FromForm] string? macAddress,      // Laptop
         [FromForm] string locationStolen,
         [FromForm] IFormFile policeReport)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        Console.WriteLine(productType);
 
         if (userIdClaim == null)
             return Unauthorized();
@@ -56,7 +59,7 @@ public class ComplaintsController : ControllerBase
 
         if (!allowed.Contains(ext))
             return BadRequest("Only PDF, JPG, or PNG files are accepted");
-        var productResult = await _products.CreateAsync(productType, brand, model, imei, frameNumber, color, serialNumber, macAddress);
+        var productResult = await _products.CreateAsync(productType, brand, model, imei, frameNumber,engineNumber, serialNumber, macAddress);
 
         if (productResult.Error != null)
             return BadRequest("Failed to create product");
@@ -71,23 +74,41 @@ public class ComplaintsController : ControllerBase
         return Ok("Complaint created successfully");
     }
 
+    [HttpPatch("{id}/approve")]
+    [Authorize]
+    public async Task<IActionResult> Approve(int id)
+    {
+        if (!IsAdmin()) return Forbid();
+        var result = await _complaints.ApproveAsync(id, GetUserId());
+        if (!result.Success) return BadRequest(result.Error);
+        return NoContent();
+    }
+
+    [HttpPatch("{id}/reject")]
+    [Authorize]
+    public async Task<IActionResult> Reject(int id)
+    {
+        if (!IsAdmin()) return Forbid();
+        var result = await _complaints.RejectAsync(id, GetUserId());
+        if (!result.Success) return BadRequest(result.Error);
+        return NoContent();
+    }
+
     [HttpPatch("{id}/resolve")]
     [Authorize]
     public async Task<IActionResult> Resolve(int id)
     {
-        var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-
-        if (userIdClaim == null)
-            return Unauthorized();
-
-        var userId = int.Parse(userIdClaim);
-        var isAdmin = User.FindFirstValue("isAdmin") == "True";
-
-        var result = await _complaints.ResolveAsync(id, userId, isAdmin);
-
-        if (!result.Success)
-            return Forbid();
-
+        if (!IsAdmin()) return Forbid();
+        var result = await _complaints.ResolveAsync(id, GetUserId());
+        if (!result.Success) return BadRequest(result.Error);
         return NoContent();
     }
+
+    // --- Helpers ---
+
+    private int GetUserId() =>
+        int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    private bool IsAdmin() =>
+        User.FindFirstValue("isAdmin") == "True";
 }

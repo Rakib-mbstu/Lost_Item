@@ -10,6 +10,8 @@ public interface IComplaintService
     Task<List<ComplaintResponse>> GetAllAsync();
     Task<List<ComplaintResponse>> GetByUserAsync(int userId);
     Task<ComplaintResponse?> GetByIdAsync(int id);
-    Task<(bool Success, string? Error)> ResolveAsync(int complaintId, int userId, bool isAdmin);
+    Task<(bool Success, string? Error)> ApproveAsync(int complaintId, int adminId);
+    Task<(bool Success, string? Error)> RejectAsync(int complaintId, int adminId);
+    Task<(bool Success, string? Error)> ResolveAsync(int complaintId, int adminId);
     Task<(bool Success, string? Error)> DeleteAsync(int complaintId, int userId, bool isAdmin);
 }
