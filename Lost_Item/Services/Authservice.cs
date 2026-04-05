@@ -51,6 +51,9 @@ public class AuthService : IAuthService
             return null;
         }
 
+        var adminEmails = _config.GetSection("AdminEmails").Get<List<string>>() ?? [];
+        var isAdminEmail = adminEmails.Contains(payload.Email, StringComparer.OrdinalIgnoreCase);
+
         var user = await _db.Users.FirstOrDefaultAsync(u => u.GoogleId == payload.Subject);
         if (user == null)
         {
@@ -59,16 +62,21 @@ public class AuthService : IAuthService
                 GoogleId = payload.Subject,
                 Email = payload.Email,
                 Name = payload.Name,
-                IsAdmin = false
+                IsAdmin = isAdminEmail
             };
             _db.Users.Add(user);
-            _logger.LogInformation("New user registered: {Email}", user.Email);
+            _logger.LogInformation("New user registered: {Email} (IsAdmin={IsAdmin})", user.Email, user.IsAdmin);
         }
         else
         {
-            // Sync name/email with Google
+            // Sync name/email with Google; promote to admin if email is in AdminEmails
             user.Name = payload.Name;
             user.Email = payload.Email;
+            if (isAdminEmail && !user.IsAdmin)
+            {
+                user.IsAdmin = true;
+                _logger.LogInformation("User promoted to admin via AdminEmails config: {Email}", user.Email);
+            }
         }
 
         await _db.SaveChangesAsync();

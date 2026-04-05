@@ -16,50 +16,57 @@ public class ProductService : IProductService
         _logger = logger;
     }
 
-    public async Task<SearchResult?> SearchAsync(string trackingId)
+    public async Task<SearchResult?> SearchByIdentifierAsync(string query, ProductType type)
     {
-        var product = await _db.Products
-            .Include(p => p.Complaints)
-            .FirstOrDefaultAsync(p => p.TrackingId == trackingId.Trim());
+        Product? product = type switch
+        {
+            ProductType.Mobile => await _db.Products
+                .OfType<Mobile>()
+                .FirstOrDefaultAsync(p => p.IMEI == query),
 
-        if (product == null) return null;
+            ProductType.Bike => await _db.Products
+                .OfType<Bike>()
+                .FirstOrDefaultAsync(p => p.FrameNumber == query || p.EngineNumber == query),
 
-        var openComplaints = product.Complaints
-            .Where(c => c.Status == ComplaintStatus.Open)
-            .Select(c => new ComplaintSummary(c.Id, c.LocationStolen, c.CreatedAt))
-            .ToList();
+            ProductType.Laptop => await _db.Products
+                .OfType<Laptop>()
+                .FirstOrDefaultAsync(p => p.SerialNumber == query || p.MacAddress == query),
 
-        return new SearchResult(
-            product.Id,
-            product.TrackingId,
-            product.Type,
-            product.Brand,
-            product.Model,
-            openComplaints.Any(),
-            openComplaints
-        );
-    }
-    public async Task<SearchResult?> SearchByIdentifierAsync(string query)
-    {
-        Product? product = await _db.Products
-                               .OfType<Mobile>().FirstOrDefaultAsync(p => p.IMEI == query)
-                           ?? (Product?) await _db.Products
-                               .OfType<Bike>().FirstOrDefaultAsync(p => p.FrameNumber == query || p.EngineNumber == query)
-                           ?? await _db.Products
-                               .OfType<Laptop>().FirstOrDefaultAsync(p => p.SerialNumber == query || p.MacAddress == query);
+            _ => null
+        };
 
         if (product == null) return null;
 
         var openComplaints = await _db.Complaints
-            .Where(c => c.ProductId == product.Id && c.Status == ComplaintStatus.Open)
-            .Include(c => c.User)
-            .Select(c => new ComplaintSummary(c.Id, c.LocationStolen, c.CreatedAt))
-                .ToListAsync();
+            .Where(c => c.ProductId == product.Id && c.Status == ComplaintStatus.Approved)
+            .Select(c => new ComplaintSummary(
+                c.Id,
+                c.LocationStolen,
+                c.CreatedAt
+            ))
+            .ToListAsync();
+
+        // If no active stolen report, check whether the item was previously reported and resolved.
+        // A resolved complaint means the item was recovered — hide it from search entirely.
+        if (openComplaints.Count == 0)
+        {
+            var wasResolved = await _db.Complaints
+                .AnyAsync(c => c.ProductId == product.Id && c.Status == ComplaintStatus.Resolved);
+            if (wasResolved) return null;
+        }
+
+        var displayId = product switch
+        {
+            Mobile m => m.IMEI,
+            Bike b => b.FrameNumber,
+            Laptop l => l.SerialNumber,
+            _ => product.TrackingId
+        };
 
         return new SearchResult(
             product.Id,
-            product.TrackingId,
-            product.Type,
+            displayId,
+            product.Type.ToString(),
             product.Brand,
             product.Model,
             openComplaints.Count > 0,
@@ -92,12 +99,19 @@ public class ProductService : IProductService
 
             _ => throw new ArgumentOutOfRangeException(nameof(productType))
         };
-        product.TrackingId = Guid.NewGuid().ToString("N")[..12].ToUpper();
+        product.Type = productType;
+        product.TrackingId = productType switch
+        {
+            ProductType.Mobile  => imei!.Trim(),
+            ProductType.Bike    => frameNumber!.Trim(),
+            ProductType.Laptop  => serialNumber!.Trim(),
+            _ => throw new ArgumentOutOfRangeException(nameof(productType))
+        };
         product.Brand = brand;
         product.Model = model;
         product.CreatedAt = DateTime.UtcNow;
         product.UpdatedAt = DateTime.UtcNow;
-
+        
         _db.Products.Add(product);
         await _db.SaveChangesAsync();
 
@@ -210,7 +224,7 @@ public class ProductService : IProductService
 
         if (product == null) return (false, "Product not found");
 
-        if (product.Complaints.Any(c => c.Status == ComplaintStatus.Open))
+        if (product.Complaints.Any(c => c.Status == ComplaintStatus.Pending || c.Status == ComplaintStatus.Approved))
             return (false, "Cannot delete a product with open complaints");
 
         _db.Products.Remove(product);

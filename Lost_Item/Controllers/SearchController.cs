@@ -1,3 +1,4 @@
+using Lost_Item.Models;
 using Lost_Item.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,14 +15,16 @@ public class SearchController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAsync([FromQuery] string trackingId)
+    public async Task<IActionResult> GetAsync([FromQuery] string trackingId, [FromQuery] ProductType type)
     {
         if (string.IsNullOrWhiteSpace(trackingId))
         {
             return BadRequest("Missing tracking id");
         }
         
-        var result = await _productService.SearchByIdentifierAsync(trackingId);
-        return new JsonResult(result);  
+        var result = await _productService.SearchByIdentifierAsync(trackingId, type);
+        if (result == null)
+            return NotFound("No product found with that identifier");
+        return new JsonResult(result);
     }
 }
