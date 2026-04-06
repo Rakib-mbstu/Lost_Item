@@ -79,20 +79,55 @@ Visibility rules:
 ### Phase 3 — UX & Polish
 
 - [x] **My Complaints page** — `/complaints` shows user's own complaints with status labels, product details, and timeline
-- [ ] **Search: handle multiple approved complaints** — show count and list of all open complaints in the result card
+- [x] **Search: multiple approved complaints** — result card lists all open complaints with location + date
+- [x] **Duplicate complaint guard** — backend returns 409 if product already has a Pending/Approved complaint; frontend shows orange warning; existing product reused on re-file
+- [x] **Loading/error states** — AdminPage has spinner and error banner on both tabs
+- [x] **Toast notifications** — `Toast.tsx` + `useToast` hook; replaces all `alert()` in AdminPage with success/error toasts
+- [x] **Input sanitizer** — global `TrimStringInputFilter` trims all string form/query params; reflects string properties on body DTOs
+- [x] **Admin dashboard stats** — stats row at top of AdminPage shows live counts (Total, Pending, Approved, Resolved, Rejected, Users); data fetched once at parent level and passed to tabs
+- [x] **Input length limits** — `maxLength` on all frontend inputs; `[StringLength]` on all controller params; `[MaxLength]` on all model properties; `AddFieldLengthLimits` migration narrows columns in DB
+- [x] **Admin policy** — `[Authorize(Policy = "AdminOnly")]` on all admin endpoints; `AdminOnly` policy registered in `Program.cs`
 - [ ] **Complaint detail page** (`/complaints/:id`) — full details and police report preview
-- [ ] **Duplicate complaint guard** — warn the user if a product already has a `Pending` or `Approved` complaint
-- [ ] **Responsive layout** — current inline styles use fixed widths; needs mobile breakpoints
-- [ ] **Loading/error states** — AdminPage has no loading indicator on API calls
-- [ ] **Toast notifications** — replace silent failures with a toast system
+- [ ] **Responsive layout** — see Phase 5 below
 
 ### Phase 4 — Security & Production
 
 - [ ] **CORS** — lock down to production domain
 - [ ] **File storage** — move uploads from local `Uploads/` to cloud storage (S3/Azure Blob)
-- [ ] **File size limit** — enforce max upload size on the backend
-- [ ] **Rate limiting** — `POST /api/complaints` and `POST /api/auth/google`
-- [ ] **Admin policy** — replace manual `if (!IsAdmin())` with `[Authorize(Policy = "AdminOnly")]`
+- [x] **File size limit** — 10 MB enforced in `ComplaintService`; `[RequestSizeLimit]` can be added if needed
+- [x] **Rate limiting** — sliding window per IP: `POST /api/auth/google` (10/min), `GET /api/search` (30/min), `POST /api/complaints` (5/min); 429 with `Retry-After: 60`
+
+---
+
+### Phase 5 — Mobile-Friendly Frontend (Tailwind CSS) ✅
+
+Fully complete. All inline styles removed; every page is responsive and uses the design system below.
+
+#### Design system — `tailwind.config.js`
+
+| Token | Hex | Role |
+|-------|-----|------|
+| `brand.primary` | `#1E3A8A` | Nav, primary buttons, links |
+| `brand.danger`  | `#DC2626` | Stolen badge, errors, destructive actions |
+| `brand.accent`  | `#F59E0B` | Pending status, warnings, amber CTAs |
+| `brand.bg`      | `#F9FAFB` | Page backgrounds |
+| `brand.text`    | `#111827` | Body text |
+| `brand.success` | `#16A34A` | Resolved status |
+| `brand.card`    | `#FFFFFF` | Card surfaces |
+| `brand.muted`   | `#6B7280` | Secondary text, placeholders |
+| `brand.border`  | `#E5E7EB` | Input / card borders |
+| `brand.subtle`  | `#EFF6FF` | Blue-tint highlight backgrounds |
+
+#### Completed
+
+- [x] **Install Tailwind** — `tailwindcss@3`, `postcss`, `autoprefixer`; config with brand tokens; `index.css` with base body styles
+- [x] **`Navbar.tsx`** — deep blue bar, amber CTA, hamburger drawer on mobile
+- [x] **`LoginPage.tsx`** — centered card with icon, Google sign-in
+- [x] **`SearchPage.tsx`** — blue hero banner, floating search card, red stolen banner on result
+- [x] **`NewComplaintPage.tsx`** — blue page header, white form card, styled file input, amber/red inline feedback
+- [x] **`MyComplaintsPage.tsx`** — status dot + colored badge per complaint, wrapping timeline row
+- [x] **`AdminPage.tsx`** — tinted stat cards (`grid-cols-2→3→6`), white complaint cards with gray header strip, users table with role pill, `Joined` hidden on mobile
+- [x] **`Toast.tsx`** — light tinted bg + left border accent per type (success/error/info)
 
 ---
 
