@@ -185,6 +185,11 @@ public class ComplaintService : IComplaintService
         return (true, null);
     }
 
+    public Task<bool> HasOpenComplaintAsync(int productId) =>
+        _db.Complaints.AnyAsync(c =>
+            c.ProductId == productId &&
+            (c.Status == ComplaintStatus.Pending || c.Status == ComplaintStatus.Approved));
+
     // --- Helpers ---
 
     private async Task<ComplaintResponse?> BuildResponseAsync(int id)

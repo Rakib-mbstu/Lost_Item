@@ -25,17 +25,40 @@ function identifierLabel(type: string): string {
   }
 }
 
-const STATUS_META: Record<Complaint['status'], { label: string; color: string; note: string }> = {
-  Pending:  { label: 'Pending Review', color: '#f39c12', note: 'Your complaint is waiting for admin review.' },
-  Approved: { label: 'Approved',       color: '#e94560', note: 'Approved — visible in the public stolen registry.' },
-  Rejected: { label: 'Rejected',       color: '#888',    note: 'An admin has dismissed this complaint.' },
-  Resolved: { label: 'Resolved',       color: '#27ae60', note: 'Marked as resolved — item recovered.' },
+const STATUS_META: Record<Complaint['status'], {
+  label: string; note: string
+  badge: string; dot: string
+}> = {
+  Pending:  {
+    label: 'Pending Review',
+    note:  'Your complaint is waiting for admin review.',
+    badge: 'bg-amber-100 text-amber-800 border border-amber-200',
+    dot:   'bg-brand-accent',
+  },
+  Approved: {
+    label: 'Approved',
+    note:  'Approved — visible in the public stolen registry.',
+    badge: 'bg-red-100 text-red-700 border border-red-200',
+    dot:   'bg-brand-danger',
+  },
+  Rejected: {
+    label: 'Rejected',
+    note:  'An admin has dismissed this complaint.',
+    badge: 'bg-gray-100 text-gray-600 border border-gray-200',
+    dot:   'bg-gray-400',
+  },
+  Resolved: {
+    label: 'Resolved',
+    note:  'Marked as resolved — item recovered.',
+    badge: 'bg-green-100 text-green-700 border border-green-200',
+    dot:   'bg-brand-success',
+  },
 }
 
 export default function MyComplaintsPage() {
   const [complaints, setComplaints] = useState<Complaint[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [error, setError]     = useState('')
 
   useEffect(() => {
     api.get('/complaints')
@@ -45,73 +68,80 @@ export default function MyComplaintsPage() {
   }, [])
 
   return (
-    <div style={s.page}>
-      <div style={s.header}>
-        <h1 style={s.title}>My Complaints</h1>
-        <Link to="/complaints/new" style={s.newBtn}>+ File New Complaint</Link>
+    <div className="min-h-screen bg-brand-bg pb-12">
+      {/* Header */}
+      <div className="bg-brand-primary py-8 px-4">
+        <div className="max-w-2xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h1 className="text-white text-2xl sm:text-3xl font-bold m-0">My Complaints</h1>
+          <Link to="/complaints/new"
+            className="bg-brand-accent text-brand-text text-sm font-semibold px-5 py-2.5 rounded-lg no-underline hover:bg-amber-400 transition-colors text-center">
+            + File New Complaint
+          </Link>
+        </div>
       </div>
 
-      {loading && <p style={s.hint}>Loading…</p>}
-      {error && <p style={s.error}>{error}</p>}
+      <div className="max-w-2xl mx-auto px-4 mt-6">
+        {loading && (
+          <div className="text-center py-12 text-brand-muted">Loading…</div>
+        )}
+        {error && (
+          <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">{error}</div>
+        )}
 
-      {!loading && complaints.length === 0 && (
-        <div style={s.empty}>
-          <p>You haven't filed any complaints yet.</p>
-          <Link to="/complaints/new" style={s.newBtn}>File your first complaint</Link>
-        </div>
-      )}
+        {!loading && complaints.length === 0 && (
+          <div className="text-center py-16 flex flex-col items-center gap-4">
+            <div className="text-5xl">📋</div>
+            <p className="text-brand-muted font-medium">No complaints filed yet.</p>
+            <Link to="/complaints/new"
+              className="bg-brand-primary text-white text-sm font-semibold px-6 py-2.5 rounded-lg no-underline hover:bg-blue-900 transition-colors">
+              File your first complaint
+            </Link>
+          </div>
+        )}
 
-      <div style={s.list}>
-        {complaints.map(c => {
-          const meta = STATUS_META[c.status] ?? STATUS_META.Pending
-          return (
-            <div key={c.id} style={s.card}>
-              <div style={s.cardTop}>
-                <div>
-                  <span style={s.product}>{c.productBrand} {c.productModel}</span>
-                  <span style={s.type}>{c.productType}</span>
+        <div className="flex flex-col gap-4">
+          {complaints.map(c => {
+            const meta = STATUS_META[c.status] ?? STATUS_META.Pending
+            return (
+              <div key={c.id} className="bg-brand-card rounded-xl shadow-card border border-brand-border overflow-hidden">
+                {/* Card top */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-4 sm:p-5 border-b border-brand-border">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <div className={`w-2 h-2 rounded-full shrink-0 ${meta.dot}`} />
+                    <span className="text-brand-text font-bold text-base">{c.productBrand} {c.productModel}</span>
+                    <span className="text-xs text-brand-muted bg-gray-100 border border-brand-border px-2 py-0.5 rounded-full">
+                      {c.productType}
+                    </span>
+                  </div>
+                  <span className={`shrink-0 self-start sm:self-auto text-xs font-semibold px-3 py-1 rounded-full ${meta.badge}`}>
+                    {meta.label}
+                  </span>
                 </div>
-                <span style={{ ...s.badge, background: meta.color }}>{meta.label}</span>
+
+                <div className="p-4 sm:p-5">
+                  <p className="text-brand-muted text-xs mb-1">
+                    {identifierLabel(c.productType)}:
+                    <span className="text-brand-text font-mono font-medium ml-1">{c.productTrackingId}</span>
+                  </p>
+                  <p className="text-brand-text text-sm mb-2">📍 {c.locationStolen}</p>
+                  <p className="text-xs italic text-brand-muted mb-3">{meta.note}</p>
+
+                  <div className="flex flex-wrap gap-4 text-xs text-brand-muted border-t border-brand-border pt-3 mb-3">
+                    <span>Filed: {new Date(c.createdAt).toLocaleDateString()}</span>
+                    {c.reviewedAt && <span>Reviewed: {new Date(c.reviewedAt).toLocaleDateString()}</span>}
+                    {c.resolvedAt && <span>Resolved: {new Date(c.resolvedAt).toLocaleDateString()}</span>}
+                  </div>
+
+                  <a href={c.policeReportUrl} target="_blank" rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-brand-primary text-xs font-medium no-underline hover:underline">
+                    📄 View Police Report
+                  </a>
+                </div>
               </div>
-
-              <p style={s.idRow}><span style={s.idLabel}>{identifierLabel(c.productType)}:</span> {c.productTrackingId}</p>
-              <p style={s.field}>📍 {c.locationStolen}</p>
-              <p style={{ ...s.note, color: meta.color }}>{meta.note}</p>
-
-              <div style={s.timeline}>
-                <span style={s.ts}>Filed: {new Date(c.createdAt).toLocaleDateString()}</span>
-                {c.reviewedAt && <span style={s.ts}>Reviewed: {new Date(c.reviewedAt).toLocaleDateString()}</span>}
-                {c.resolvedAt && <span style={s.ts}>Resolved: {new Date(c.resolvedAt).toLocaleDateString()}</span>}
-              </div>
-
-              <a href={c.policeReportUrl} target="_blank" rel="noreferrer" style={s.link}>📄 Police Report</a>
-            </div>
-          )
-        })}
+            )
+          })}
+        </div>
       </div>
     </div>
   )
-}
-
-const s: Record<string, React.CSSProperties> = {
-  page:       { minHeight: '90vh', background: '#0f0f1a', color: '#fff', padding: 24, maxWidth: 800, margin: '0 auto' },
-  header:     { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 28 },
-  title:      { fontSize: 28, fontWeight: 700, margin: 0 },
-  newBtn:     { background: '#e94560', color: '#fff', border: 'none', padding: '10px 20px', borderRadius: 8, cursor: 'pointer', textDecoration: 'none', fontSize: 14, fontWeight: 600 },
-  hint:       { color: '#aaa' },
-  error:      { color: '#e94560' },
-  empty:      { textAlign: 'center', padding: '60px 0', color: '#aaa', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 },
-  list:       { display: 'flex', flexDirection: 'column', gap: 14 },
-  card:       { background: '#1a1a2e', borderRadius: 12, padding: 20 },
-  cardTop:    { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 10, gap: 12 },
-  product:    { fontWeight: 700, fontSize: 16, marginRight: 8 },
-  type:       { fontSize: 12, color: '#aaa', background: '#0f0f1a', padding: '2px 8px', borderRadius: 10 },
-  badge:      { flexShrink: 0, padding: '4px 12px', borderRadius: 12, fontSize: 12, fontWeight: 700, color: '#fff' },
-  idRow:      { color: '#ccc', fontSize: 13, margin: '4px 0' },
-  idLabel:    { color: '#666', fontSize: 12 },
-  field:      { color: '#ccc', margin: '4px 0', fontSize: 14 },
-  note:       { fontSize: 12, margin: '8px 0 4px', fontStyle: 'italic' },
-  timeline:   { display: 'flex', gap: 16, marginTop: 10, flexWrap: 'wrap' },
-  ts:         { fontSize: 11, color: '#666' },
-  link:       { display: 'inline-block', marginTop: 10, color: '#e94560', textDecoration: 'none', fontSize: 13 },
 }

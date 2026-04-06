@@ -1,5 +1,7 @@
+using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Lost_Item.Services;
 using System.Security.Claims;
 using Lost_Item.Models;
@@ -31,16 +33,17 @@ public class ComplaintsController : ControllerBase
 
     [HttpPost]
     [Authorize]
+    [EnableRateLimiting("complaints-create")]
     public async Task<IActionResult> Create(
-        [FromForm] ProductType productType,      // "Mobile" | "Bike" | "Laptop"
-        [FromForm] string brand,
-        [FromForm] string model,
-        [FromForm] string? imei,            // Mobile
-        [FromForm] string? frameNumber,     // Bike
-        [FromForm] string? engineNumber,           // Bike
-        [FromForm] string? serialNumber,    // Laptop
-        [FromForm] string? macAddress,      // Laptop
-        [FromForm] string locationStolen,
+        [FromForm] ProductType productType,
+        [FromForm, StringLength(100)] string brand,
+        [FromForm, StringLength(100)] string model,
+        [FromForm, StringLength(20)]  string? imei,
+        [FromForm, StringLength(50)]  string? frameNumber,
+        [FromForm, StringLength(50)]  string? engineNumber,
+        [FromForm, StringLength(100)] string? serialNumber,
+        [FromForm, StringLength(17)]  string? macAddress,
+        [FromForm, StringLength(200)] string locationStolen,
         [FromForm] IFormFile policeReport)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
@@ -59,12 +62,25 @@ public class ComplaintsController : ControllerBase
 
         if (!allowed.Contains(ext))
             return BadRequest("Only PDF, JPG, or PNG files are accepted");
-        var productResult = await _products.CreateAsync(productType, brand, model, imei, frameNumber,engineNumber, serialNumber, macAddress);
 
-        if (productResult.Error != null)
-            return BadRequest("Failed to create product");
+        // Duplicate guard: reuse existing product or block if already has an open complaint
+        int productId;
+        var existing = await _products.FindByIdentifierAsync(productType, imei, frameNumber, serialNumber);
+        if (existing != null)
+        {
+            if (await _complaints.HasOpenComplaintAsync(existing.Id))
+                return Conflict("This product already has a pending or approved complaint. Search by its identifier to view details.");
+            productId = existing.Id;
+        }
+        else
+        {
+            var productResult = await _products.CreateAsync(productType, brand, model, imei, frameNumber, engineNumber, serialNumber, macAddress);
+            if (productResult.Error != null)
+                return BadRequest("Failed to create product");
+            productId = productResult.Product!.Id;
+        }
 
-        var result = await _complaints.CreateAsync(userId, productResult.Product.Id, locationStolen, policeReport);
+        var result = await _complaints.CreateAsync(userId, productId, locationStolen, policeReport);
 
         Console.WriteLine(result);
 
@@ -75,30 +91,27 @@ public class ComplaintsController : ControllerBase
     }
 
     [HttpPatch("{id}/approve")]
-    [Authorize]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Approve(int id)
     {
-        if (!IsAdmin()) return Forbid();
         var result = await _complaints.ApproveAsync(id, GetUserId());
         if (!result.Success) return BadRequest(result.Error);
         return NoContent();
     }
 
     [HttpPatch("{id}/reject")]
-    [Authorize]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Reject(int id)
     {
-        if (!IsAdmin()) return Forbid();
         var result = await _complaints.RejectAsync(id, GetUserId());
         if (!result.Success) return BadRequest(result.Error);
         return NoContent();
     }
 
     [HttpPatch("{id}/resolve")]
-    [Authorize]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> Resolve(int id)
     {
-        if (!IsAdmin()) return Forbid();
         var result = await _complaints.ResolveAsync(id, GetUserId());
         if (!result.Success) return BadRequest(result.Error);
         return NoContent();

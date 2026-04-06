@@ -1,8 +1,12 @@
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using System.Net;
 using System.Text;
+using System.Threading.RateLimiting;
 using Lost_Item.Data;
+using Lost_Item.Filters;
 using Lost_Item.Services;
 
 Microsoft.IdentityModel.Logging.IdentityModelEventSource.ShowPII = true;
@@ -59,8 +63,15 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
         };
     });
 
-builder.Services.AddAuthorization();
-builder.Services.AddControllers();
+builder.Services.AddAuthorization(options =>
+{
+    options.AddPolicy("AdminOnly", policy =>
+        policy.RequireClaim("isAdmin", "True"));
+});
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<TrimStringInputFilter>();
+});
 
 // CORS for React dev server
 builder.Services.AddCors(options =>
@@ -69,6 +80,57 @@ builder.Services.AddCors(options =>
         policy.WithOrigins("http://localhost:5173")
               .AllowAnyHeader()
               .AllowAnyMethod());
+});
+
+// Rate limiting — per client IP, sliding window
+builder.Services.AddRateLimiter(options =>
+{
+    static string GetClientIp(HttpContext ctx) =>
+        ctx.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+
+    // POST /api/auth/google — 10 requests / 1 min
+    options.AddPolicy("auth-login", ctx =>
+        RateLimitPartition.GetSlidingWindowLimiter(GetClientIp(ctx), _ =>
+            new SlidingWindowRateLimiterOptions
+            {
+                Window             = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow  = 6,
+                PermitLimit        = 10,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit         = 0,
+            }));
+
+    // GET /api/search — 30 requests / 1 min
+    options.AddPolicy("search", ctx =>
+        RateLimitPartition.GetSlidingWindowLimiter(GetClientIp(ctx), _ =>
+            new SlidingWindowRateLimiterOptions
+            {
+                Window             = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow  = 6,
+                PermitLimit        = 30,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit         = 0,
+            }));
+
+    // POST /api/complaints — 5 requests / 1 min
+    options.AddPolicy("complaints-create", ctx =>
+        RateLimitPartition.GetSlidingWindowLimiter(GetClientIp(ctx), _ =>
+            new SlidingWindowRateLimiterOptions
+            {
+                Window             = TimeSpan.FromMinutes(1),
+                SegmentsPerWindow  = 6,
+                PermitLimit        = 5,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit         = 0,
+            }));
+
+    options.OnRejected = async (context, ct) =>
+    {
+        context.HttpContext.Response.StatusCode = (int)HttpStatusCode.TooManyRequests;
+        context.HttpContext.Response.Headers.RetryAfter = "60";
+        await context.HttpContext.Response.WriteAsync(
+            "Too many requests. Please wait before trying again.", ct);
+    };
 });
 
 builder.Services.AddEndpointsApiExplorer();
@@ -131,6 +193,7 @@ app.UseStaticFiles(new StaticFileOptions
     RequestPath = "/uploads"
 });
 
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

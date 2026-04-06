@@ -14,4 +14,7 @@ public interface IComplaintService
     Task<(bool Success, string? Error)> RejectAsync(int complaintId, int adminId);
     Task<(bool Success, string? Error)> ResolveAsync(int complaintId, int adminId);
     Task<(bool Success, string? Error)> DeleteAsync(int complaintId, int userId, bool isAdmin);
+
+    /// <summary>Returns true if the product already has a Pending or Approved complaint.</summary>
+    Task<bool> HasOpenComplaintAsync(int productId);
 }

@@ -1,6 +1,8 @@
+using System.ComponentModel.DataAnnotations;
 using Lost_Item.Models;
 using Lost_Item.Services;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Lost_Item.Controllers;
 
@@ -15,7 +17,8 @@ public class SearchController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetAsync([FromQuery] string trackingId, [FromQuery] ProductType type)
+    [EnableRateLimiting("search")]
+    public async Task<IActionResult> GetAsync([FromQuery, StringLength(100)] string trackingId, [FromQuery] ProductType type)
     {
         if (string.IsNullOrWhiteSpace(trackingId))
         {
