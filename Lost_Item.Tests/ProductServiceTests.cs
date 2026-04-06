@@ -139,8 +139,10 @@ public class ProductServiceTests
 
         var result = await svc.SearchByIdentifierAsync("333333333333333", ProductType.Mobile);
 
-        // Pending complaints are not included in openComplaints (only Approved are)
-        // and since there is no resolved complaint, result should not be null but IsStolen=false
+        // SearchByIdentifierAsync only surfaces Approved complaints as "open".
+        // HasOpenComplaintAsync treats both Pending and Approved as "open" to block duplicate filing.
+        // These two methods intentionally differ: search is public-facing (only shows approved),
+        // while HasOpenComplaint is used internally to prevent duplicate complaints.
         Assert.NotNull(result);
         Assert.False(result.IsStolen);
         Assert.Empty(result.OpenComplaints);
