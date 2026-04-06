@@ -31,6 +31,14 @@ public class ComplaintsController : ControllerBase
         return Ok(data);
     }
 
+    [HttpGet("mine")]
+    [Authorize]
+    public async Task<IActionResult> GetMine()
+    {
+        var data = await _complaints.GetByUserAsync(GetUserId());
+        return Ok(data);
+    }
+
     [HttpPost]
     [Authorize]
     [EnableRateLimiting("complaints-create")]
@@ -117,11 +125,41 @@ public class ComplaintsController : ControllerBase
         return NoContent();
     }
 
+    [HttpPatch("{id}/note")]
+    [Authorize(Policy = "AdminOnly")]
+    public async Task<IActionResult> AddNote(int id, [FromBody] AddNoteRequest body)
+    {
+        var result = await _complaints.AddNoteAsync(id, body.Note);
+        if (!result.Success) return BadRequest(result.Error);
+        return NoContent();
+    }
+
+    [HttpPost("{id}/updates")]
+    [Authorize]
+    public async Task<IActionResult> PostUpdate(int id, [FromBody] PostUpdateRequest body)
+    {
+        var result = await _complaints.AddUpdateAsync(id, GetUserId(), body.Message);
+        if (!result.Success) return BadRequest(result.Error);
+        return NoContent();
+    }
+
+    [HttpGet("{id}/updates")]
+    [Authorize]
+    public async Task<IActionResult> GetUpdates(int id)
+    {
+        var result = await _complaints.GetUpdatesAsync(id, GetUserId(), IsAdmin());
+        if (result.Error != null) return BadRequest(result.Error);
+        return Ok(result.Updates);
+    }
+
     // --- Helpers ---
 
     private int GetUserId() =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
 
     private bool IsAdmin() =>
-        User.FindFirstValue("isAdmin") == "True";
+        User.HasClaim("isAdmin", "True");
 }
+
+public record AddNoteRequest([StringLength(1000)] string? Note);
+public record PostUpdateRequest([StringLength(500)] string Message);

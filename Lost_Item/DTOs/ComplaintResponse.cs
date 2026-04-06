@@ -14,5 +14,6 @@ public record ComplaintResponse(
     string Status,
     DateTime CreatedAt,
     DateTime? ReviewedAt,
-    DateTime? ResolvedAt
+    DateTime? ResolvedAt,
+    string? AdminNote
   );

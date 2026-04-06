@@ -67,10 +67,25 @@ Visibility rules:
 | PATCH | `/api/auth/users/{id}/make-admin` | JWT + Admin | Grant/revoke admin |
 | GET | `/api/search?trackingId=&type=` | — | Search by identifier |
 | GET | `/api/complaints` | JWT | Admin sees all; user sees own |
+| GET | `/api/complaints/mine` | JWT | Always returns only the current user's complaints |
 | POST | `/api/complaints` | JWT | File new complaint (multipart) |
 | PATCH | `/api/complaints/{id}/approve` | JWT + Admin | Approve pending → visible in search |
 | PATCH | `/api/complaints/{id}/reject` | JWT + Admin | Reject pending complaint |
 | PATCH | `/api/complaints/{id}/resolve` | JWT + Admin | Resolve approved complaint |
+| PATCH | `/api/complaints/{id}/note` | JWT + Admin | Set or clear admin note on a complaint |
+| GET | `/api/complaints/{id}/updates` | JWT (owner or admin) | Get user-posted updates for a complaint |
+| POST | `/api/complaints/{id}/updates` | JWT (owner only) | Post a timestamped update on a complaint |
+
+---
+
+## Complaint Approval Workflow & Updates (feature/complaint-approval-workflow)
+
+- [x] **Complaint approval workflow** — `Pending → Approved → Resolved` or `Pending → Rejected`; admin-only PATCH endpoints with status guards
+- [x] **Admin note** — `PATCH /api/complaints/{id}/note`; state-independent; stored as `AdminNote` (max 1000 chars) on `Complaints` table
+- [x] **`IsAdmin()` helper** — added to `ComplaintsController`; uses `User.HasClaim("isAdmin", "True")` matching the `AdminOnly` policy claim
+- [x] **User complaint updates** — owners of Pending/Approved complaints can post timestamped messages; stored in `ComplaintUpdates` table; private to owner + admins
+- [x] **`GET /api/complaints/mine`** — always filters by current user regardless of admin status; fixes admin users seeing all complaints on My Complaints page
+- [x] **Navbar active-page highlight** — desktop: white text + white bottom border on active link; mobile: accent left border; uses `useLocation()` to compare pathname
 
 ---
 
@@ -88,7 +103,7 @@ Visibility rules:
 - [x] **Input length limits** — `maxLength` on all frontend inputs; `[StringLength]` on all controller params; `[MaxLength]` on all model properties; `AddFieldLengthLimits` migration narrows columns in DB
 - [x] **Admin policy** — `[Authorize(Policy = "AdminOnly")]` on all admin endpoints; `AdminOnly` policy registered in `Program.cs`
 - [ ] **Complaint detail page** (`/complaints/:id`) — full details and police report preview
-- [ ] **Responsive layout** — see Phase 5 below
+- [x] **Responsive layout** — complete; see Phase 5 below
 
 ### Phase 4 — Security & Production
 
@@ -140,6 +155,8 @@ Products (TPH)  — Id, Type, Brand, Model, TrackingId (unique), CreatedAt, Upda
   Bike          — + FrameNumber (unique), EngineNumber (unique)
   Laptop        — + SerialNumber (unique), MacAddress (unique, nullable)
 Complaints      — Id, ProductId→Products, UserId→Users, LocationStolen,
-                  PoliceReportPath, Status, CreatedAt, ReviewedAt?, ResolvedAt?
+                  PoliceReportPath, Status, AdminNote?, CreatedAt, ReviewedAt?, ResolvedAt?
+ComplaintUpdates — Id, ComplaintId→Complaints (cascade), UserId→Users (restrict),
+                   Message (max 500), CreatedAt
 RevokedTokens   — Id, Jti, UserId→Users, ExpiresAt
 ```

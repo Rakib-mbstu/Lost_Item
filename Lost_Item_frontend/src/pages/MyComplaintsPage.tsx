@@ -16,6 +16,13 @@ interface Complaint {
   resolvedAt?: string
 }
 
+interface ComplaintUpdate {
+  id: number
+  message: string
+  userName: string
+  createdAt: string
+}
+
 function identifierLabel(type: string): string {
   switch (type) {
     case 'Mobile': return 'IMEI'
@@ -55,13 +62,152 @@ const STATUS_META: Record<Complaint['status'], {
   },
 }
 
+function ComplaintCard({ c }: { c: Complaint }) {
+  const meta = STATUS_META[c.status] ?? STATUS_META.Pending
+  const canUpdate = c.status === 'Pending' || c.status === 'Approved'
+
+  const [expanded, setExpanded]   = useState(false)
+  const [updates, setUpdates]     = useState<ComplaintUpdate[]>([])
+  const [loadingUp, setLoadingUp] = useState(false)
+  const [upError, setUpError]     = useState('')
+  const [message, setMessage]     = useState('')
+  const [posting, setPosting]     = useState(false)
+  const [postError, setPostError] = useState('')
+
+  const fetchUpdates = async () => {
+    setLoadingUp(true); setUpError('')
+    try {
+      const { data } = await api.get(`/complaints/${c.id}/updates`)
+      setUpdates(data)
+    } catch {
+      setUpError('Failed to load updates')
+    } finally {
+      setLoadingUp(false)
+    }
+  }
+
+  const handleToggle = () => {
+    if (!expanded) fetchUpdates()
+    setExpanded(prev => !prev)
+  }
+
+  const handlePost = async () => {
+    if (!message.trim()) return
+    setPosting(true); setPostError('')
+    try {
+      await api.post(`/complaints/${c.id}/updates`, { message })
+      setMessage('')
+      fetchUpdates()
+    } catch (e: any) {
+      setPostError(e.response?.data || 'Failed to post update')
+    } finally {
+      setPosting(false)
+    }
+  }
+
+  return (
+    <div className="bg-brand-card rounded-xl shadow-card border border-brand-border overflow-hidden">
+      {/* Card top */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-4 sm:p-5 border-b border-brand-border">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className={`w-2 h-2 rounded-full shrink-0 ${meta.dot}`} />
+          <span className="text-brand-text font-bold text-base">{c.productBrand} {c.productModel}</span>
+          <span className="text-xs text-brand-muted bg-gray-100 border border-brand-border px-2 py-0.5 rounded-full">
+            {c.productType}
+          </span>
+        </div>
+        <span className={`shrink-0 self-start sm:self-auto text-xs font-semibold px-3 py-1 rounded-full ${meta.badge}`}>
+          {meta.label}
+        </span>
+      </div>
+
+      <div className="p-4 sm:p-5">
+        <p className="text-brand-muted text-xs mb-1">
+          {identifierLabel(c.productType)}:
+          <span className="text-brand-text font-mono font-medium ml-1">{c.productTrackingId}</span>
+        </p>
+        <p className="text-brand-text text-sm mb-2">📍 {c.locationStolen}</p>
+        <p className="text-xs italic text-brand-muted mb-3">{meta.note}</p>
+
+        <div className="flex flex-wrap gap-4 text-xs text-brand-muted border-t border-brand-border pt-3 mb-3">
+          <span>Filed: {new Date(c.createdAt).toLocaleDateString()}</span>
+          {c.reviewedAt && <span>Reviewed: {new Date(c.reviewedAt).toLocaleDateString()}</span>}
+          {c.resolvedAt && <span>Resolved: {new Date(c.resolvedAt).toLocaleDateString()}</span>}
+        </div>
+
+        <div className="flex items-center gap-4">
+          <a href={c.policeReportUrl} target="_blank" rel="noreferrer"
+            className="inline-flex items-center gap-1.5 text-brand-primary text-xs font-medium no-underline hover:underline">
+            📄 View Police Report
+          </a>
+          <button
+            onClick={handleToggle}
+            className="text-xs text-brand-primary font-medium hover:underline cursor-pointer border-0 bg-transparent p-0"
+          >
+            {expanded ? '▲ Hide Updates' : '▼ Updates'}
+          </button>
+        </div>
+
+        {/* Expandable updates section */}
+        {expanded && (
+          <div className="border-t border-brand-border mt-3 pt-3">
+            {loadingUp && <p className="text-brand-muted text-xs">Loading…</p>}
+            {upError   && <p className="text-red-600 text-xs">{upError}</p>}
+
+            {updates.length === 0 && !loadingUp && (
+              <p className="text-brand-muted text-xs italic mb-3">No updates yet.</p>
+            )}
+
+            {updates.length > 0 && (
+              <div className="flex flex-col gap-2 mb-3">
+                {updates.map(u => (
+                  <div key={u.id} className="bg-gray-50 border border-brand-border rounded-lg px-3 py-2">
+                    <p className="text-brand-text text-sm">{u.message}</p>
+                    <p className="text-brand-muted text-xs mt-1">
+                      {u.userName} · {new Date(u.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {canUpdate && (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  value={message}
+                  onChange={e => setMessage(e.target.value)}
+                  maxLength={500}
+                  rows={3}
+                  placeholder="Write an update…"
+                  className="w-full border border-brand-border rounded-lg px-3 py-2 text-sm resize-none focus:outline-none focus:border-brand-primary"
+                />
+                <div className="flex items-center justify-between">
+                  <span className="text-brand-muted text-xs">{message.length}/500</span>
+                  <button
+                    onClick={handlePost}
+                    disabled={posting || !message.trim()}
+                    className="bg-brand-primary text-white text-xs font-semibold px-4 py-1.5 rounded-lg disabled:opacity-50 cursor-pointer hover:bg-blue-900 transition-colors"
+                  >
+                    {posting ? 'Posting…' : 'Post Update'}
+                  </button>
+                </div>
+                {postError && <p className="text-red-600 text-xs">{postError}</p>}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function MyComplaintsPage() {
   const [complaints, setComplaints] = useState<Complaint[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError]     = useState('')
 
   useEffect(() => {
-    api.get('/complaints')
+    api.get('/complaints/mine')
       .then(r => setComplaints(r.data))
       .catch(() => setError('Failed to load complaints'))
       .finally(() => setLoading(false))
@@ -100,46 +246,7 @@ export default function MyComplaintsPage() {
         )}
 
         <div className="flex flex-col gap-4">
-          {complaints.map(c => {
-            const meta = STATUS_META[c.status] ?? STATUS_META.Pending
-            return (
-              <div key={c.id} className="bg-brand-card rounded-xl shadow-card border border-brand-border overflow-hidden">
-                {/* Card top */}
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-4 sm:p-5 border-b border-brand-border">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${meta.dot}`} />
-                    <span className="text-brand-text font-bold text-base">{c.productBrand} {c.productModel}</span>
-                    <span className="text-xs text-brand-muted bg-gray-100 border border-brand-border px-2 py-0.5 rounded-full">
-                      {c.productType}
-                    </span>
-                  </div>
-                  <span className={`shrink-0 self-start sm:self-auto text-xs font-semibold px-3 py-1 rounded-full ${meta.badge}`}>
-                    {meta.label}
-                  </span>
-                </div>
-
-                <div className="p-4 sm:p-5">
-                  <p className="text-brand-muted text-xs mb-1">
-                    {identifierLabel(c.productType)}:
-                    <span className="text-brand-text font-mono font-medium ml-1">{c.productTrackingId}</span>
-                  </p>
-                  <p className="text-brand-text text-sm mb-2">📍 {c.locationStolen}</p>
-                  <p className="text-xs italic text-brand-muted mb-3">{meta.note}</p>
-
-                  <div className="flex flex-wrap gap-4 text-xs text-brand-muted border-t border-brand-border pt-3 mb-3">
-                    <span>Filed: {new Date(c.createdAt).toLocaleDateString()}</span>
-                    {c.reviewedAt && <span>Reviewed: {new Date(c.reviewedAt).toLocaleDateString()}</span>}
-                    {c.resolvedAt && <span>Resolved: {new Date(c.resolvedAt).toLocaleDateString()}</span>}
-                  </div>
-
-                  <a href={c.policeReportUrl} target="_blank" rel="noreferrer"
-                    className="inline-flex items-center gap-1.5 text-brand-primary text-xs font-medium no-underline hover:underline">
-                    📄 View Police Report
-                  </a>
-                </div>
-              </div>
-            )
-          })}
+          {complaints.map(c => <ComplaintCard key={c.id} c={c} />)}
         </div>
       </div>
     </div>

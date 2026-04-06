@@ -17,4 +17,10 @@ public interface IComplaintService
 
     /// <summary>Returns true if the product already has a Pending or Approved complaint.</summary>
     Task<bool> HasOpenComplaintAsync(int productId);
+
+    /// <summary>Sets or clears the admin note on a complaint. Note is state-independent.</summary>
+    Task<(bool Success, string? Error)> AddNoteAsync(int complaintId, string? note);
+
+    Task<(bool Success, string? Error)> AddUpdateAsync(int complaintId, int userId, string message);
+    Task<(List<ComplaintUpdateResponse>? Updates, string? Error)> GetUpdatesAsync(int complaintId, int userId, bool isAdmin);
 }

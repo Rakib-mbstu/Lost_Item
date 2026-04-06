@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Bike> Bikes => Set<Bike>();
     public DbSet<Laptop> Laptops => Set<Laptop>();
     public DbSet<Complaint> Complaints => Set<Complaint>();
+    public DbSet<ComplaintUpdate> ComplaintUpdates => Set<ComplaintUpdate>();
     public DbSet<RevokedToken> RevokedTokens => Set<RevokedToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)

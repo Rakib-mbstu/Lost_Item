@@ -4,6 +4,13 @@ import { ToastContainer, useToast } from '../components/Toast'
 
 // --- Types ---
 
+interface ComplaintUpdate {
+  id: number
+  message: string
+  userName: string
+  createdAt: string
+}
+
 interface Complaint {
   id: number
   productTrackingId: string
@@ -138,13 +145,13 @@ export default function AdminPage() {
         <StatsRow complaints={complaints} users={users} loading={loadingComplaints || loadingUsers} />
 
         {/* Tabs */}
-        <div className="flex gap-2 mb-6 border-b border-brand-border pb-0">
+        <div className="flex mb-6 border-b-2 border-brand-border">
           {(['complaints', 'users'] as const).map(t => (
             <button key={t} onClick={() => setTab(t)}
-              className={`px-5 py-2.5 text-sm font-medium capitalize cursor-pointer border-0 transition-colors rounded-t-lg
+              className={`px-6 py-2.5 text-sm font-semibold capitalize cursor-pointer border-0 transition-colors -mb-0.5
                 ${tab === t
-                  ? 'bg-brand-primary text-white'
-                  : 'bg-transparent text-brand-muted hover:text-brand-text'}`}
+                  ? 'text-brand-primary border-b-2 border-brand-primary bg-transparent'
+                  : 'text-brand-muted bg-transparent hover:text-brand-text hover:border-b-2 hover:border-gray-300'}`}
             >{t}</button>
           ))}
         </div>
@@ -155,6 +162,114 @@ export default function AdminPage() {
           : <UsersTab users={users} loading={loadingUsers}
               error={usersError} reload={loadUsers} showToast={showToast} />
         }
+      </div>
+    </div>
+  )
+}
+
+// --- Admin complaint card ---
+
+function AdminComplaintCard({ c, action }: {
+  c: Complaint
+  action: (id: number, endpoint: 'approve' | 'reject' | 'resolve') => void
+}) {
+  const [expanded, setExpanded]   = useState(false)
+  const [updates, setUpdates]     = useState<ComplaintUpdate[]>([])
+  const [loadingUp, setLoadingUp] = useState(false)
+  const [upError, setUpError]     = useState('')
+
+  const fetchUpdates = async () => {
+    setLoadingUp(true); setUpError('')
+    try {
+      const { data } = await api.get(`/complaints/${c.id}/updates`)
+      setUpdates(data)
+    } catch {
+      setUpError('Failed to load updates')
+    } finally {
+      setLoadingUp(false)
+    }
+  }
+
+  const handleToggle = () => {
+    if (!expanded) fetchUpdates()
+    setExpanded(prev => !prev)
+  }
+
+  return (
+    <div className="bg-brand-card rounded-xl border border-brand-border shadow-card overflow-hidden">
+      {/* Card header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 sm:px-5 py-3 border-b border-brand-border bg-gray-50">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-brand-text font-bold text-sm">{c.productBrand} {c.productModel}</span>
+          <span className="text-xs text-brand-muted bg-white border border-brand-border px-2 py-0.5 rounded-full">{c.productType}</span>
+          <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${STATUS_BADGE[c.status]}`}>{c.status}</span>
+        </div>
+        <span className="text-brand-muted text-xs shrink-0">{new Date(c.createdAt).toLocaleDateString()}</span>
+      </div>
+
+      <div className="px-4 sm:px-5 py-4">
+        <p className="text-brand-muted text-xs mb-1">
+          {identifierLabel(c.productType)}:
+          <code className="text-brand-primary font-mono text-xs font-medium ml-1">{c.productTrackingId}</code>
+        </p>
+        <p className="text-brand-text text-sm mb-1">👤 {c.userName} <span className="text-brand-muted text-xs">{c.userEmail}</span></p>
+        <p className="text-brand-text text-sm mb-2">📍 {c.locationStolen}</p>
+        {(c.reviewedAt || c.resolvedAt) && (
+          <div className="flex flex-wrap gap-3 text-xs text-brand-muted mb-2">
+            {c.reviewedAt && <span>Reviewed: {new Date(c.reviewedAt).toLocaleDateString()}</span>}
+            {c.resolvedAt && <span>Resolved: {new Date(c.resolvedAt).toLocaleDateString()}</span>}
+          </div>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-brand-border">
+          <a href={c.policeReportUrl} target="_blank" rel="noreferrer"
+            className="text-brand-primary text-xs font-medium no-underline hover:underline">
+            📄 Police Report
+          </a>
+          {c.status === 'Pending' && <>
+            <button onClick={() => action(c.id, 'approve')}
+              className="border border-green-300 text-green-700 bg-green-50 text-xs px-3 py-1 rounded-md cursor-pointer hover:bg-green-100 transition-colors font-medium">
+              ✓ Approve
+            </button>
+            <button onClick={() => action(c.id, 'reject')}
+              className="border border-gray-300 text-gray-500 bg-gray-50 text-xs px-3 py-1 rounded-md cursor-pointer hover:bg-gray-100 transition-colors font-medium">
+              ✕ Reject
+            </button>
+          </>}
+          {c.status === 'Approved' && (
+            <button onClick={() => action(c.id, 'resolve')}
+              className="border border-blue-200 text-brand-primary bg-brand-subtle text-xs px-3 py-1 rounded-md cursor-pointer hover:bg-blue-100 transition-colors font-medium">
+              Mark Resolved
+            </button>
+          )}
+          <button
+            onClick={handleToggle}
+            className="border border-brand-border text-brand-muted bg-white text-xs px-3 py-1 rounded-md cursor-pointer hover:bg-gray-50 transition-colors font-medium"
+          >
+            {expanded ? '▲ Updates' : '▼ Updates'}
+          </button>
+        </div>
+
+        {/* Read-only updates panel */}
+        {expanded && (
+          <div className="border-t border-brand-border mt-3 pt-3">
+            {loadingUp && <p className="text-brand-muted text-xs">Loading…</p>}
+            {upError   && <p className="text-red-600 text-xs">{upError}</p>}
+            {updates.length === 0 && !loadingUp && (
+              <p className="text-brand-muted text-xs italic">No updates from the owner.</p>
+            )}
+            <div className="flex flex-col gap-2">
+              {updates.map(u => (
+                <div key={u.id} className="bg-gray-50 border border-brand-border rounded-lg px-3 py-2">
+                  <p className="text-brand-text text-sm">{u.message}</p>
+                  <p className="text-brand-muted text-xs mt-1">
+                    {u.userName} · {new Date(u.createdAt).toLocaleString()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -216,55 +331,7 @@ function ComplaintsTab({ complaints, loading, error, reload, showToast }: {
           </div>
         )}
         {visible.map(c => (
-          <div key={c.id} className="bg-brand-card rounded-xl border border-brand-border shadow-card overflow-hidden">
-            {/* Card header */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 sm:px-5 py-3 border-b border-brand-border bg-gray-50">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-brand-text font-bold text-sm">{c.productBrand} {c.productModel}</span>
-                <span className="text-xs text-brand-muted bg-white border border-brand-border px-2 py-0.5 rounded-full">{c.productType}</span>
-                <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-full ${STATUS_BADGE[c.status]}`}>{c.status}</span>
-              </div>
-              <span className="text-brand-muted text-xs shrink-0">{new Date(c.createdAt).toLocaleDateString()}</span>
-            </div>
-
-            <div className="px-4 sm:px-5 py-4">
-              <p className="text-brand-muted text-xs mb-1">
-                {identifierLabel(c.productType)}:
-                <code className="text-brand-primary font-mono text-xs font-medium ml-1">{c.productTrackingId}</code>
-              </p>
-              <p className="text-brand-text text-sm mb-1">👤 {c.userName} <span className="text-brand-muted text-xs">{c.userEmail}</span></p>
-              <p className="text-brand-text text-sm mb-2">📍 {c.locationStolen}</p>
-              {(c.reviewedAt || c.resolvedAt) && (
-                <div className="flex flex-wrap gap-3 text-xs text-brand-muted mb-2">
-                  {c.reviewedAt && <span>Reviewed: {new Date(c.reviewedAt).toLocaleDateString()}</span>}
-                  {c.resolvedAt && <span>Resolved: {new Date(c.resolvedAt).toLocaleDateString()}</span>}
-                </div>
-              )}
-
-              <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-brand-border">
-                <a href={c.policeReportUrl} target="_blank" rel="noreferrer"
-                  className="text-brand-primary text-xs font-medium no-underline hover:underline">
-                  📄 Police Report
-                </a>
-                {c.status === 'Pending' && <>
-                  <button onClick={() => action(c.id, 'approve')}
-                    className="border border-green-300 text-green-700 bg-green-50 text-xs px-3 py-1 rounded-md cursor-pointer hover:bg-green-100 transition-colors font-medium">
-                    ✓ Approve
-                  </button>
-                  <button onClick={() => action(c.id, 'reject')}
-                    className="border border-gray-300 text-gray-500 bg-gray-50 text-xs px-3 py-1 rounded-md cursor-pointer hover:bg-gray-100 transition-colors font-medium">
-                    ✕ Reject
-                  </button>
-                </>}
-                {c.status === 'Approved' && (
-                  <button onClick={() => action(c.id, 'resolve')}
-                    className="border border-blue-200 text-brand-primary bg-brand-subtle text-xs px-3 py-1 rounded-md cursor-pointer hover:bg-blue-100 transition-colors font-medium">
-                    Mark Resolved
-                  </button>
-                )}
-              </div>
-            </div>
-          </div>
+          <AdminComplaintCard key={c.id} c={c} action={action} />
         ))}
       </div>
     </div>
