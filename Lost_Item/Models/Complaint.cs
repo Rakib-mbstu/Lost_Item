@@ -15,4 +15,6 @@ public class Complaint
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     public DateTime? ReviewedAt { get; set; }
     public DateTime? ResolvedAt { get; set; }
+    [MaxLength(1000)] public string? AdminNote { get; set; }
+    public ICollection<ComplaintUpdate> Updates { get; set; } = new List<ComplaintUpdate>();
 }
