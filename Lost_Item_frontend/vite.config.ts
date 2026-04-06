@@ -9,5 +9,11 @@ export default defineConfig({
       '/api': 'http://localhost:5099',
       '/uploads': 'http://localhost:5099'
     }
+  },
+  test: {
+    globals: true,
+    environment: 'happy-dom',
+    setupFiles: './src/test/setup.ts',
+    css: false
   }
 })

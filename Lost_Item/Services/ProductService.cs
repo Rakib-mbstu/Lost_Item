@@ -167,6 +167,7 @@ public class ProductService : IProductService
             Brand = req.Brand,
             Model = req.Model,
             FrameNumber = req.FrameNumber.Trim(),
+            EngineNumber = req.EngineNumber.Trim(),
             TrackingId = req.FrameNumber.Trim()
         };
 
