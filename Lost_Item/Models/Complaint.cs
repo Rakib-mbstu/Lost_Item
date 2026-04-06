@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Lost_Item.Models;
 
 public class Complaint
@@ -7,7 +9,7 @@ public class Complaint
     public Product Product { get; set; } = null!;
     public int UserId { get; set; }
     public User User { get; set; } = null!;
-    public string LocationStolen { get; set; } = null!;
+    [MaxLength(200)] public string LocationStolen { get; set; } = null!;
     public string PoliceReportPath { get; set; } = null!; // file path
     public ComplaintStatus Status { get; set; } = ComplaintStatus.Pending;
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

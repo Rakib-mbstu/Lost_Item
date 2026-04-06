@@ -233,6 +233,24 @@ public class ProductService : IProductService
         return (true, null);
     }
 
+    public async Task<Product?> FindByIdentifierAsync(
+        ProductType type, string? imei, string? frameNumber, string? serialNumber)
+    {
+        return type switch
+        {
+            ProductType.Mobile when !string.IsNullOrWhiteSpace(imei) =>
+                await _db.Products.OfType<Mobile>().FirstOrDefaultAsync(p => p.IMEI == imei),
+
+            ProductType.Bike when !string.IsNullOrWhiteSpace(frameNumber) =>
+                await _db.Products.OfType<Bike>().FirstOrDefaultAsync(p => p.FrameNumber == frameNumber),
+
+            ProductType.Laptop when !string.IsNullOrWhiteSpace(serialNumber) =>
+                await _db.Products.OfType<Laptop>().FirstOrDefaultAsync(p => p.SerialNumber == serialNumber),
+
+            _ => null
+        };
+    }
+
     // --- Helpers ---
 
     private async Task<bool> TrackingIdExistsAsync(string trackingId) =>

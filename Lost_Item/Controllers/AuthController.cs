@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 using System.IdentityModel.Tokens.Jwt;
@@ -24,6 +25,7 @@ public class AuthController : ControllerBase
 
     /// <summary>POST /api/auth/google — exchange Google ID token for app JWT</summary>
     [HttpPost("google")]
+    [EnableRateLimiting("auth-login")]
     public async Task<IActionResult> GoogleLogin([FromBody] GoogleAuthRequest req)
     {
         var result = await _auth.AuthenticateGoogleAsync(req.idToken);
@@ -58,21 +60,18 @@ public class AuthController : ControllerBase
 
     /// <summary>GET /api/auth/users — admin: list all users</summary>
     [HttpGet("users")]
-    [Authorize]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> GetAllUsers()
     {
-        if (!IsAdmin()) return Forbid();
         var users = await _auth.GetAllUsersAsync();
         return Ok(users);
     }
 
     /// <summary>PATCH /api/auth/users/{id}/make-admin — admin: grant or revoke admin</summary>
     [HttpPatch("users/{id}/make-admin")]
-    [Authorize]
+    [Authorize(Policy = "AdminOnly")]
     public async Task<IActionResult> SetAdmin(int id, [FromBody] SetAdminRequest req)
     {
-        if (!IsAdmin()) return Forbid();
-
         var (success, error) = await _auth.SetAdminAsync(id, req.IsAdmin);
         if (!success) return error == "User not found" ? NotFound(error) : BadRequest(error);
         return Ok(new { message = $"User {id} IsAdmin set to {req.IsAdmin}" });
@@ -82,9 +81,6 @@ public class AuthController : ControllerBase
 
     private int GetUserId() =>
         int.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
-
-    private bool IsAdmin() =>
-        User.FindFirstValue("isAdmin") == "True";
 
     private (string? Jti, DateTime ExpiresAt) ExtractJtiAndExpiry()
     {

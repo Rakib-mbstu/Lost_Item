@@ -16,5 +16,8 @@ Task<List<ProductResponse>> GetAllAsync();
     Task<(ProductResponse? Result, string? Error)> CreateLaptopAsync(CreateLaptopRequest req);
     Task<(bool Success, string? Error)> UpdateAsync(int id, UpdateProductRequest req);
     Task<(bool Success, string? Error)> DeleteAsync(int id);
-    Task<SearchResult?> SearchByIdentifierAsync(string query,ProductType type);
+    Task<SearchResult?> SearchByIdentifierAsync(string query, ProductType type);
+
+    /// <summary>Returns the existing product matching the given type-specific identifier, or null.</summary>
+    Task<Product?> FindByIdentifierAsync(ProductType type, string? imei, string? frameNumber, string? serialNumber);
 }
