@@ -55,11 +55,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                 Console.WriteLine($"CHALLENGE DESC: {context.ErrorDescription}");
                 return Task.CompletedTask;
             },
-            OnMessageReceived = context =>
-            {
-                Console.WriteLine($"TOKEN RECEIVED: {context.Token?[..20]}...");
-                return Task.CompletedTask;
-            }
+            OnMessageReceived = context => Task.CompletedTask
         };
     });
 
