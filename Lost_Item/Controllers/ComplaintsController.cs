@@ -2,6 +2,7 @@ using System.ComponentModel.DataAnnotations;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Lost_Item.DTOs;
 using Lost_Item.Services;
 using System.Security.Claims;
 using Lost_Item.Models;
@@ -42,38 +43,29 @@ public class ComplaintsController : ControllerBase
     [HttpPost]
     [Authorize]
     [EnableRateLimiting("complaints-create")]
-    public async Task<IActionResult> Create(
-        [FromForm] ProductType productType,
-        [FromForm, StringLength(100)] string brand,
-        [FromForm, StringLength(100)] string model,
-        [FromForm, StringLength(20)]  string? imei,
-        [FromForm, StringLength(50)]  string? frameNumber,
-        [FromForm, StringLength(50)]  string? engineNumber,
-        [FromForm, StringLength(100)] string? serialNumber,
-        [FromForm, StringLength(17)]  string? macAddress,
-        [FromForm, StringLength(200)] string locationStolen,
-        [FromForm] IFormFile policeReport)
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> Create([FromForm] CreateComplaintFormRequest req)
     {
         var userIdClaim = User.FindFirstValue(ClaimTypes.NameIdentifier);
-        Console.WriteLine(productType);
+        Console.WriteLine(req.ProductType);
 
         if (userIdClaim == null)
             return Unauthorized();
 
         var userId = int.Parse(userIdClaim);
 
-        if (policeReport == null || policeReport.Length == 0)
+        if (req.PoliceReport == null || req.PoliceReport.Length == 0)
             return BadRequest("Police report file is required");
 
         var allowed = new[] { ".pdf", ".jpg", ".jpeg", ".png" };
-        var ext = Path.GetExtension(policeReport.FileName).ToLower();
+        var ext = Path.GetExtension(req.PoliceReport.FileName).ToLower();
 
         if (!allowed.Contains(ext))
             return BadRequest("Only PDF, JPG, or PNG files are accepted");
 
         // Duplicate guard: reuse existing product or block if already has an open complaint
         int productId;
-        var existing = await _products.FindByIdentifierAsync(productType, imei, frameNumber, serialNumber);
+        var existing = await _products.FindByIdentifierAsync(req.ProductType, req.Imei, req.FrameNumber, req.SerialNumber);
         if (existing != null)
         {
             if (await _complaints.HasOpenComplaintAsync(existing.Id))
@@ -82,17 +74,17 @@ public class ComplaintsController : ControllerBase
         }
         else
         {
-            var productResult = await _products.CreateAsync(productType, brand, model, imei, frameNumber, engineNumber, serialNumber, macAddress);
+            var productResult = await _products.CreateAsync(req.ProductType, req.Brand, req.Model, req.Imei, req.FrameNumber, req.EngineNumber, req.SerialNumber, req.MacAddress);
             if (productResult.Error != null)
                 return BadRequest("Failed to create product");
             productId = productResult.Product!.Id;
         }
 
-        var result = await _complaints.CreateAsync(userId, productId, locationStolen, policeReport);
+        var result = await _complaints.CreateAsync(userId, productId, req.LocationStolen, req.PoliceReport);
 
         Console.WriteLine(result);
 
-        if (result.Error!=null)
+        if (result.Error != null)
             return BadRequest("Failed to create complaint");
 
         return Ok("Complaint created successfully");
